@@ -12,16 +12,12 @@ requireApp('system/test/unit/mock_ftu_launcher.js');
 requireApp('system/test/unit/mock_app_window_manager.js');
 requireApp('system/test/unit/mock_app_window.js');
 requireApp('system/test/unit/mock_lockscreen_slide.js');
-requireApp('system/test/unit/mock_clock.js', function() {
-  window.realClock = window.Clock;
-  window.Clock = window.MockClock;
-  requireApp('system/test/unit/mock_orientation_manager.js',
-    function() {
-      window.realOrientationManager = window.OrientationManager;
-      window.OrientationManager = window.MockOrientationManager;
-      requireApp('system/lockscreen/js/lockscreen.js');
-    });
-});
+requireApp('system/test/unit/mock_orientation_manager.js',
+  function() {
+    window.realOrientationManager = window.OrientationManager;
+    window.OrientationManager = window.MockOrientationManager;
+    requireApp('system/lockscreen/js/lockscreen.js');
+  });
 
 if (!this.FtuLauncher) {
   this.FtuLauncher = null;
@@ -33,12 +29,10 @@ if (!this.SettingsListener) {
 
 var mocksForLockScreen = new window.MocksHelper([
   'OrientationManager', 'AppWindowManager', 'AppWindow', 'LockScreenSlide',
-  'Clock', 'SettingsListener', 'Image', 'Canvas'
+  'SettingsListener', 'Image', 'Canvas'
 ]).init();
 
 requireApp('system/test/unit/mock_clock.js', function() {
-  window.realClock = window.Clock;
-  window.Clock = window.MockClock;
   requireApp('system/test/unit/mock_orientation_manager.js',
     function() {
       window.realOrientationManager = window.OrientationManager;
@@ -75,6 +69,22 @@ suite('system/LockScreen >', function() {
        'overlay', 'clockTime', 'date'].forEach(function(name) {
           subject[name] = document.createElement('div');
       });
+    };
+
+    window.LockScreenClockWidget = function() {
+      this.stop = function() {
+        return this;
+      };
+      this.start = function() {
+        return this;
+      };
+      this.destroy = function() {
+        return this;
+      };
+      this.next = function(cb) {
+        cb();
+        return this;
+      };
     };
 
     window.lockScreenNotifications = {
@@ -123,6 +133,7 @@ suite('system/LockScreen >', function() {
     domMessage = document.createElement('div');
     subject.message = domMessage;
     subject.chargingStatus.elements.charging = document.createElement('div');
+    subject.lockScreenClockWidget = new window.LockScreenClockWidget();
 
     var mockClock = {
       start: function() {},
@@ -152,29 +163,10 @@ suite('system/LockScreen >', function() {
     assert.isTrue(!!(subject._lockscreenConnInfoManager),
                   'the second condition is not satisfied: ' +
                   !!(subject._lockscreenConnInfoManager));
-    this.sinon.stub(subject, 'refreshClock');
     subject.l10nInit();
     assert.isFalse(stubConnInfoManager.called,
       'the l10nInit still instantiate the conn info manager even it\'s NOT' +
       'undefined');
-    window.navigator.mozMobileConnections = originalMozMobileConnections;
-    window.navigator.mozL10n = originalMozl10n;
-    delete subject._lockscreenConnInfoManager;
-  });
-
-  test('L10n initialization: it would start to update the clock', function() {
-    this.sinon.stub(window,
-      'LockScreenConnInfoManager');
-    var originalMozl10n = window.navigator.mozL10n;
-    var originalMozMobileConnections = window.navigator.mozMobileConnections;
-    window.navigator.mozL10n = {
-      get: function() { return ''; }
-    };
-    var stubStart = this.sinon.stub(subject.clock, 'start');
-    window.navigator.mozMobileConnections = {};
-    subject._lockscreenConnInfoManager = {};
-    subject.l10nInit();
-    assert.isTrue(stubStart.called);
     window.navigator.mozMobileConnections = originalMozMobileConnections;
     window.navigator.mozL10n = originalMozl10n;
     delete subject._lockscreenConnInfoManager;
@@ -196,7 +188,6 @@ suite('system/LockScreen >', function() {
     assert.isTrue(!subject._lockscreenConnInfoManager,
                   'the second condition is not satisfied: ' +
                   !(subject._lockscreenConnInfoManager));
-    this.sinon.stub(subject, 'refreshClock');
     subject.l10nInit();
     assert.isTrue(stubConnInfoManager.called,
        'the l10nInit doesn\'t instantiate the conn info manager even it\'s ' +
@@ -212,10 +203,27 @@ suite('system/LockScreen >', function() {
     assert.isTrue(subject.locked);
   });
 
+  test('Lock: would create the clock widget', function() {
+    subject.overlay = domOverlay;
+    var stubCreateClockWidget = this.sinon.stub(subject, 'createClockWidget');
+    subject.locked = false;
+    subject.lock();
+    assert.isTrue(stubCreateClockWidget.called);
+  });
+
   test('Unlock: can actually unlock', function() {
     subject.overlay = domOverlay;
     subject.unlock(true);
     assert.isFalse(subject.locked);
+  });
+
+  test('Unlock: would destroy the clock widget', function() {
+    var stubDestroy = this.sinon.stub(subject.lockScreenClockWidget, 'destroy');
+    subject.overlay = domOverlay;
+    subject.locked = true;
+    subject.unlock(true);
+    assert.isTrue(stubDestroy.called);
+    assert.isUndefined(subject.lockScreenClockWidget);
   });
 
   test('Passcode: enter passcode should fire the validation event', function() {
@@ -382,16 +390,6 @@ suite('system/LockScreen >', function() {
               })),
           'the event was not fired');
         stubDispatch.restore();
-      });
-
-  test('Handle event: when timeformat changed,' +
-      'would fire event to refresh the clock',
-      function() {
-        var stubRefreshClock = this.sinon.stub(subject, 'refreshClock');
-        subject.l10nready = true; // Or it would block the handler.
-        subject.handleEvent(new CustomEvent('timeformatchange'));
-        assert.isTrue(stubRefreshClock.called,
-          'the refreshClock wasn\'t called even after the time format changed');
       });
 
   test('invokeSecureApp: checking manifest and app URL of the fired Event' +
